@@ -21,6 +21,7 @@ knitr::opts_chunk$set(warning = FALSE)
 * Download the micro-files used in downstream analysis 
 * Load a subset of the files  
 * Look at the variable names  
+* Do some initial EDA  
 
 ### Locating files on web  
 The micro-files are currently located in Gabriel Zucman's Distributional National Accounts page located [here](http://gabriel-zucman.eu/usdina/). 
@@ -29,7 +30,7 @@ The micro-files are currently located in Gabriel Zucman's Distributional Nationa
 After clicking on the circled link you will be able to download a zip file of all of the current yearly files.  There will probably be a new set released every year and the zip file may change over time.
 ![Download a zip file](images/Dina Main Site - Download Zip File.png)  
 
-Unzip the source files to a folder that you can get to through R.  I have mine in a sub-directory of the main R project.  
+Unzip the source files to a folder that you can get to through R.  I have mine in a sub-directory off the main R project.  
 
 Create a new folder at the same level as the folder you unzipped to called `Dina_subset`.  You can change the code you'll see later if you want a different folder structure. 
 
@@ -44,30 +45,72 @@ library(haven)
 ```
 
 ###Get the filenames in Dina_subset  
-This uses the `fs` package's `dir_ls()` function. I have the 1968 & 2018 years in the subset folder.  
+I have the 1968 & 2018 years in the subset folder.  
+1968 represents a starkly different economic picture of the US than 2018.  Since the microfiles only go back to 1962 and 2018 represents the first year with the effects of the 2017 Tax Reform I will generally use 1968 and 2018 as the first and last years of any analysis.  
+
+This uses the `fs` package's `dir_ls()` function which returns the filenames in the directory which can then be fed into the `purrr::map_dfr()` function. 
 ```{r eval=FALSE}
 files <- dir_ls("Data/Dina_subset/") 
 files
 ```
-![](images/Dina_02_filenames.png)
+![](images/02_filenames.png)
 
 ### Import the files into a single dataframe  
-This part does a lot in two lines of code.  It maps the filenames to the `haven` package's `read_dta()` function which imports native-Stata data files.  It also appends the filename to a column called `id`, then extracts the year from the filename and puts it into another column.  
+This part does a lot in a few lines of code.  It maps the filenames from the previous step to the `haven` package's `read_dta()` function which imports native-Stata data files.  It also appends the filename to a column called `id`, then extracts the year from the filename and puts it into another column.  
 ```{r eval=FALSE}
 dina_df <- map_dfr(files, ~ read_dta(.x), .id = "filename") %>%
-  extract(filename, "year", "(\\d{4})")
+  extract(filename, "year", "(\\d{4})") %>%
+  select(year, everything())
 dim(dina_df)
 ```
-![](images/Dina_02_dimensions.png)
+![](images/02_dimensions.png)  
 
-There are 146 variables per record.
 
-###Look at the variable names  
-This is what we're going to deal with next.  
+There are 146 variables per record.  That is a lot of variables which makes exploratory work a little more challenging. Let's look at a couple high-level metrics.  
+
+###Does each file have the same number of records?  
+```{r eval=FALSE}
+dina_df %>% 
+  group_by(year) %>%
+  summarize( records = n())
+```
+![](images/02_records_per_year.png)  
+
+2018 has about three times as many records as 1968.  Since each record represents a cohort of all Americans we might infer that in 1968 there was less income & wealth variability in the population.  This will be something to explore in a later post.  
+
+###How many different types of variables are there?  
+I'm interested in the mix of numeric and character fields.  Character fields are generally categorical and give us potential grouping options.  
+```{r eval=FALSE}
+table(map_chr(dina_df, class))
+```
+![](images/02_variable_classes.png)  
+
+All numeric except for one.  
+
+###What do the first few variables look like?  
+Usually the most important variables are placed at the beginning of a dataset.  Let's look at the first 20 variables to see if they give some insight into what the rest of that data represents.  
+```{r eval=FALSE}
+glimpse(dina_df[, 1:20])
+```
+![](images/02_glimpse_first_20.png)  
+
+It turns out that the only character column was the year, which we created, and really should be numeric.  
+
+Some of these numerics are in fact categorical variables that need to be re-coded with more descriptive labels.  
+
+The hard-core economic data starts at the `fiinc` variable.  There seems to be a naming convention starting with `fiinc`.  The next few names are the same except for the 2nd character.  
+
+###Get a random sample of variable names  
+Maybe the column names at the beginning were an anomoly and the rest of the vars have descriptive names.  Let's get 30 random column names.    
 ```{r eval=FALSE}
 sample(names(dina_df), 30, replace = FALSE)
 ```
-![](images/Dina_02_var_names.png)
+![](images/02_var_sample_30.png)  
+
+You can probably guess at some of the names but most are hard to decipher without the code.  
+
+This dataset is unusable in its current form.  All of the variable names have to change, and the categorical data needs re-coding.  
+
 ##Next up:  Renaming the variables  
 
 ###END
